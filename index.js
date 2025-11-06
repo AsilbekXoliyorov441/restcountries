@@ -1,6 +1,8 @@
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args)); // ✅ fetch qo‘shildi
 
 const app = express();
 
@@ -11,65 +13,49 @@ app.get("/", (req, res) => {
 });
 
 app.get("*", async (req, res) => {
-  const endpoint = "https://restcountries.com/v3.1";
-  let response = await fetch(endpoint + req.url.split("?")[0]);
-  let data = await response.json();
+  try {
+    const endpoint = "https://restcountries.com/v3.1";
+    const basePath = req.path; // ✅ faqat path
+    const response = await fetch(endpoint + basePath);
 
-  let totalData = JSON.parse(JSON.stringify(data));
+    if (!response.ok) {
+      return res.status(response.status).json({ error: "Failed to fetch API" });
+    }
 
-  let {
-    query: { page, limit = 10, order },
-  } = req;
+    let data = await response.json();
+    const totalData = [...data];
 
-  if (order === "asc") {
-    data.sort((a, b) => {
-      const nameA = a.name.common.toUpperCase();
-      const nameB = b.name.common.toUpperCase();
+    // ✅ query params to‘g‘ri olish
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const order = req.query.order;
 
-      if (nameA < nameB) {
-        return -1;
-      }
-      if (nameA > nameB) {
-        return 1;
-      }
-      return 0;
-    });
-  }
+    // ✅ tartiblash
+    if (order === "asc" || order === "desc") {
+      data.sort((a, b) => {
+        const nameA = a.name.common.toUpperCase();
+        const nameB = b.name.common.toUpperCase();
+        return order === "asc"
+          ? nameA.localeCompare(nameB)
+          : nameB.localeCompare(nameA);
+      });
+    }
 
-  if (order === "desc") {
-    data.sort((a, b) => {
-      const nameA = a.name.common.toUpperCase();
-      const nameB = b.name.common.toUpperCase();
-
-      if (nameB > nameA) {
-        return 1;
-      }
-
-      if (nameB < nameA) {
-        return -1;
-      }
-
-      return 0;
-    });
-  }
-
-  if (page) {
+    // ✅ pagination
     const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
+    const paginatedData = data.slice(startIndex, startIndex + limit);
 
-    data = data.slice(startIndex, endIndex);
+    res.json({
+      total: totalData.length,
+      page,
+      limit,
+      data: paginatedData,
+    });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
-
-  const results = {
-    data,
-    total: totalData.length,
-  };
-
-  res.send(results);
 });
 
 const port = process.env.PORT || 3000;
-
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+app.listen(port, () => console.log(`✅ Server running on port ${port}`));

@@ -1,22 +1,26 @@
 const express = require("express");
-const path = require("path");
 const cors = require("cors");
 const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args)); // ✅ fetch qo‘shildi
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const app = express();
-
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.send("✅ Countries API Proxy is running!");
 });
 
 app.get("*", async (req, res) => {
   try {
     const endpoint = "https://restcountries.com/v3.1";
-    const basePath = req.path; // ✅ faqat path
-    const response = await fetch(endpoint + basePath);
+    let path = req.path;
+
+    // agar foydalanuvchi faqat / bo‘lsa => /all ga yo‘naltiramiz
+    if (path === "/") path = "/all";
+
+    // 🔧 fields qo‘shamiz
+    const query = "?fields=name,flags,region,capital,population";
+    const response = await fetch(endpoint + path + query);
 
     if (!response.ok) {
       return res.status(response.status).json({ error: "Failed to fetch API" });
@@ -25,12 +29,10 @@ app.get("*", async (req, res) => {
     let data = await response.json();
     const totalData = [...data];
 
-    // ✅ query params to‘g‘ri olish
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const order = req.query.order;
 
-    // ✅ tartiblash
     if (order === "asc" || order === "desc") {
       data.sort((a, b) => {
         const nameA = a.name.common.toUpperCase();
@@ -41,18 +43,17 @@ app.get("*", async (req, res) => {
       });
     }
 
-    // ✅ pagination
-    const startIndex = (page - 1) * limit;
-    const paginatedData = data.slice(startIndex, startIndex + limit);
+    const start = (page - 1) * limit;
+    const paginated = data.slice(start, start + limit);
 
     res.json({
       total: totalData.length,
       page,
       limit,
-      data: paginatedData,
+      data: paginated,
     });
   } catch (err) {
-    console.error("Error:", err);
+    console.error(err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
